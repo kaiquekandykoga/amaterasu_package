@@ -30,8 +30,15 @@ main() {
 
   tmp=$(mktemp -d)
   mount="$tmp/mount"
-  trap 'hdiutil detach -quiet "$mount" 2>/dev/null; rm -rf "$tmp" "$app.installing"' EXIT
-  trap 'exit 130' INT TERM
+  # Stopped between moving the old app aside and putting the new one in place (Ctrl-C, or the
+  # window closed), the old app goes back, so the Mac is never left without one.
+  # Only this run's own copy goes back: an older Amaterasu.app.old left by an earlier run is never
+  # brought back in place of an app the user removed.
+  moved_aside=0
+  # set +e: under set -e the trap would stop at its first failing step (nothing mounted yet, say)
+  # and skip the rest of the clean-up, or putting the old app back.
+  trap 'set +e; hdiutil detach -quiet "$mount" 2>/dev/null; rm -rf "$tmp" "$app.installing"; if [ "$moved_aside" = 1 ] && [ ! -e "$app" ] && [ -e "$app.old" ]; then mv "$app.old" "$app"; fi' EXIT
+  trap 'exit 130' INT TERM HUP
 
   echo "Downloading Amaterasu..."
   curl -fL --progress-bar -o "$tmp/Amaterasu.dmg" "$dmg_url" || fail "the download didn't finish."
@@ -50,8 +57,18 @@ main() {
   # Copy beside the old app first, so a failed copy leaves the old one in place.
   rm -rf "$app.installing"
   ditto "$new" "$app.installing" || fail "it couldn't be copied to $applications."
-  rm -rf "$app"
-  mv "$app.installing" "$app"
+  # The old app is moved aside, not deleted, until the new one is in place: a removal that failed
+  # part-way would leave a broken app behind.
+  rm -rf "$app.old" || fail "an earlier $app.old couldn't be removed."
+  if [ -e "$app" ]; then
+    mv "$app" "$app.old" || fail "the installed Amaterasu couldn't be moved aside."
+    moved_aside=1
+  fi
+  if ! mv "$app.installing" "$app"; then
+    [ -e "$app.old" ] && mv "$app.old" "$app"
+    fail "it couldn't be moved into $applications."
+  fi
+  rm -rf "$app.old" 2>/dev/null || echo "Left the previous version at $app.old; delete it when you like." >&2
 
   echo "Installed Amaterasu $version in $applications. Open it from Applications or Launchpad."
 }
