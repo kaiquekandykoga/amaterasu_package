@@ -3,6 +3,9 @@
 Installers for Amaterasu, an AI app for macOS. Download the latest from
 [Releases](https://github.com/kaiquekandykoga/amaterasu_package/releases/latest).
 
+Each release also holds `Amaterasu-darwin-<arch>.zip`, the same app zipped, which installed
+copies download when they update themselves.
+
 Or install it from Terminal, which copies the latest release into Applications:
 
 ```sh
